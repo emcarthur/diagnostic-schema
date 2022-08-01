@@ -1,26 +1,72 @@
 import dash
-from dash import html, dcc
+from dash import html, dcc, Input, Output
 import os
+import dash_interactive_graphviz
 
 app = dash.Dash(__name__)
 server = app.server
 
-#app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"})
+initial_dot_source = """
+digraph  {
+node[style="filled"]
+a ->b->d
+a->c->d
+}
+"""
 
-app.layout = html.Div([
-    html.H2('Hello World'),
-    dcc.Dropdown(
-        id='dropdown',
-        options=[{'label': i, 'value': i} for i in ['LA', 'NYC', 'MTL']],
-        value='LA'
-    ),
-    html.Div(id='display-value')
-])
+app.layout = html.Div(
+    [
+        html.Div(
+            dash_interactive_graphviz.DashInteractiveGraphviz(id="gv"),
+            style=dict(flexGrow=1, position="relative",height='20%'),
+        ),
+        html.Div(
+            [
+                html.H3("Selected element"),
+                html.Div(id="selected"),
+                html.H3("Dot Source"),
+                dcc.Textarea(
+                    id="input",
+                    value=initial_dot_source,
+                    style=dict(flexGrow=1, position="relative"),
+                ),
+                html.H3("Engine"),
+                dcc.Dropdown(
+                    id="engine",
+                    value="dot",
+                    options=[
+                        dict(label=engine, value=engine)
+                        for engine in [
+                            "dot",
+                            "fdp",
+                            "neato",
+                            "circo",
+                            "osage",
+                            "patchwork",
+                            "twopi",
+                        ]
+                    ],
+                ),
+            ],
+            style=dict(display="flex", flexDirection="column"),
+        ),
+    ],
+    style=dict(position="absolute", height="100%", width="100%", display="flex"),
+)
 
-@app.callback(dash.dependencies.Output('display-value', 'children'),
-              [dash.dependencies.Input('dropdown', 'value')])
-def display_value(value):
-    return 'You have selected "{}"'.format(value)
 
-if __name__ == '__main__':
+@app.callback(
+    [Output("gv", "dot_source"), Output("gv", "engine")],
+    [Input("input", "value"), Input("engine", "value")],
+)
+def display_output(value, engine):
+    return value, engine
+
+
+@app.callback(Output("selected", "children"), [Input("gv", "selected")])
+def show_selected(value):
+    return html.Div(value)
+
+
+if __name__ == "__main__":
     app.run_server(debug=True)
