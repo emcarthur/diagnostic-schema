@@ -1,0 +1,17 @@
+name: schema_app
+dependencies:
+  - python=3.8.8
+  - pip:
+    - dash
+    - dash-renderer
+    - dash-core-components
+    - dash-html-components
+    - dash-bootstrap-components
+    - dash-dangerously-set-inner-html
+    - dash-extensions
+    - graphviz
+    - dash-interactive-graphviz
+    - plotly
+    - gunicorn
+    - numpy
+    - pandas
