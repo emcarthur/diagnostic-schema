@@ -2,6 +2,8 @@ import dash
 from dash import html, dcc, Input, Output
 import os
 import dash_interactive_graphviz
+from graphviz import Digraph
+
 
 app = dash.Dash(__name__)
 server = app.server
@@ -30,6 +32,8 @@ app.layout = html.Div(
                     value=initial_dot_source,
                     style=dict(flexGrow=1, position="relative"),
                 ),
+                html.Button("Download Image", id="btn_image"),
+                dcc.Download(id="download-image"),
                 html.H3("Engine"),
                 dcc.Dropdown(
                     id="engine",
@@ -61,6 +65,17 @@ app.layout = html.Div(
 )
 def display_output(value, engine):
     return value, engine
+
+@app.callback(
+    Output("download-image", "data"),
+    Input("btn_image", "n_clicks"),
+    prevent_initial_call=True,
+)
+def func(n_clicks):
+    s = Digraph(initial_dot_source, filename="test.gv", format="pdf")
+    s.render(f"downloads/x")
+    return dcc.send_file(f"downloads/x.pdf")
+
 
 
 @app.callback(Output("selected", "children"), [Input("gv", "selected")])

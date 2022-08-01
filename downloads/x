@@ -1,0 +1,8 @@
+digraph "
+digraph  {
+node[style=\"filled\"]
+a ->b->d
+a->c->d
+}
+" {
+}
