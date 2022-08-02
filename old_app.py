@@ -3,7 +3,7 @@ from dash import html, dcc, Input, Output
 import os
 import dash_interactive_graphviz
 from graphviz import Digraph
-
+os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
 
 app = dash.Dash(__name__)
 server = app.server
