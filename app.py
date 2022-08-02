@@ -10,6 +10,8 @@
 #! fix toggle box
 #! refresh button top right
 #! survey
+#! Dr webber
+#! cc info
 
 ### Input libraries nodes ###
 
@@ -177,6 +179,7 @@ class GraphGenerator:
 ###
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server = app.server
 
 # schema = GraphGenerator("../OrganizationalChart5.txt","hypoglycemia",1,True)
 # initial_dot_source = schema.s.source
@@ -365,4 +368,4 @@ def func(n_clicks, df, sheet_name, width_scalar, stack):
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
