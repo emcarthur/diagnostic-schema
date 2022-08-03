@@ -1,13 +1,15 @@
 
 #! To do: fix dissapearing dashed lines
 #! To do: ignore nodes without the "Name" category
-#! To do: some kerning issues on pdf export, some indent issues on notes
+#! To do: some kerning issues on pdf export, some indent issues on notes: https://forum.graphviz.org/t/unwanted-space-around-html-font-tags/460/4
 #! Blurry thumbnail of youtube video until resize
 #! watermark
 #! legend to pdf
 #! refresh button top right
 #! survey to google sheets
 #! some more examples (fix chest pain and hypoglycemia links)
+#! wont work with node that has a number
+#! center width
 
 ### Input libraries nodes ###
 
@@ -149,7 +151,7 @@ class GraphGenerator:
                 html_str += '</font></TD></TR>'
 
             html_str += '</TABLE>>'
-            self.schema.node(str(node_num),label=html_str, fontname="helvetica")
+            self.schema.node(str(node_num),label=html_str, fontname="Helvetica")
 
     def plotEdges(self, df, stack):
         if not(stack):
@@ -411,7 +413,41 @@ app.layout = dbc.Container(
     ], style = {"margin-top": '15px'}
 )
 
+# https://stackoverflow.com/a/72754236
+from PyPDF2 import PdfFileReader, PdfFileWriter
+from PyPDF2 import PageObject
+landscape_footer = PdfFileReader(open('./assets/landscape_footer.pdf', 'rb')).getPage(0)
+portrait_footer = PdfFileReader(open('./assets/portrait_footer.pdf', 'rb')).getPage(0)
+landscape_footer_width = landscape_footer.mediaBox.getWidth(); landscape_footer_height = landscape_footer.mediaBox.getHeight()
+portrait_footer_width = portrait_footer.mediaBox.getWidth(); portrait_footer_height = portrait_footer.mediaBox.getHeight()
+def add_footer(schema_pdf):
+    schema = PdfFileReader(open(schema_pdf + '.pdf', 'rb')).getPage(0)
+    schema_width = schema.mediaBox.getWidth(); schema_height = schema.mediaBox.getHeight()
 
+    if schema_width/schema_height > 1.2:
+    # Landscape
+    # 504 height x 792 width
+        merged_schema = PageObject.createBlankPage(None, 792, 612)
+        scalar = min(504/schema_height, 792/schema_width)
+        center_translate_height = int((504-(scalar*schema_height))/2)
+        center_translate_width = int((792-(scalar*schema_width))/2)
+        merged_schema.mergeScaledTranslatedPage(schema,scalar,0+center_translate_width,108+center_translate_height)
+        merged_schema.mergeScaledTranslatedPage(landscape_footer,1,0,0)
+    else:
+    # Portrait
+    # 684 height x 612 width
+        merged_schema = PageObject.createBlankPage(None, 612, 792)
+        scalar = min(684/schema_height, 612/schema_width)
+        center_translate_height =  int((684-(scalar*schema_height))/2)
+        center_translate_width = int((612-(scalar*schema_width))/2)
+        merged_schema.mergeScaledTranslatedPage(schema,scalar,0+center_translate_width,108+center_translate_height)
+        merged_schema.mergeScaledTranslatedPage(portrait_footer,1,0,0)
+
+    writer = PdfFileWriter()
+    writer.addPage(merged_schema)
+
+    with open(schema_pdf + '.footer.pdf', 'wb') as f:
+        writer.write(f)
 
 @app.callback(
     Output("modal-dismiss", "is_open"),
@@ -472,7 +508,8 @@ def func(n_clicks, df, sheet_name, width_scalar, stack):
     #sheet_name = "Hypoglycemia"
     chart = GraphGenerator(df,sheet_name,2**width_scalar,stack, render=True)
     chart.schema.render(f"downloads/{filename}")
-    return dcc.send_file(f"downloads/{filename}.pdf")
+    _  = add_footer(f"downloads/{filename}")
+    return dcc.send_file(f"downloads/{filename}.footer.pdf")
 
 
 if __name__ == '__main__':

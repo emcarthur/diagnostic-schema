@@ -15,3 +15,4 @@ dependencies:
     - gunicorn
     - numpy
     - pandas
+    - PyPDF2
