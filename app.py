@@ -4,14 +4,10 @@
 #! To do: some kerning issues on pdf export, some indent issues on notes
 #! Blurry thumbnail of youtube video until resize
 #! watermark
-#! legend
 #! legend to pdf
-#! favicon
-#! fix toggle box
 #! refresh button top right
-#! survey
-#! Dr webber
-#! cc info
+#! survey to google sheets
+#! some more examples (fix chest pain and hypoglycemia links)
 
 ### Input libraries nodes ###
 
@@ -19,26 +15,18 @@
 
 
 import dash_interactive_graphviz
-#import dash
 from dash import Dash, html, dcc, Input, Output, State, callback_context
-#from dash.dependencies import Input, Output, State
-
-# import dash_html_components as html
-# import dash_core_components as dcc
 from graphviz import Digraph
 import textwrap
 import re
 import dash_bootstrap_components as dbc
-# from dash.dependencies import Output, Input
-# from dash_extensions import Download
 import uuid
-# from dash_extensions.snippets import send_file
 import pandas as pd
 import numpy as np
 import dash_dangerously_set_inner_html
 
 import os
-os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
+#os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
 
 ### Helper functions & dictionaries to format GraphViz HTML nodes ###
 
@@ -184,15 +172,14 @@ server = app.server
 # schema = GraphGenerator("../OrganizationalChart5.txt","hypoglycemia",1,True)
 # initial_dot_source = schema.s.source
 
-title_style = {"margin-top": '12px', 'margin-bottom':'10px', 'font-size':"20px", 'font-weight':'600'}
+title_style = {"margin-top": '10px', 'margin-bottom':'8px', 'font-size':"18px", 'font-weight':'600'}
 hr_style = {'width': '90%', 'margin':'auto', 'color': '#9e9e9e', 'background-color': '#9e9e9e', 'height': '1px', 'border': 'none'}
 
 definition_block = html.Details(
     [
         html.Summary('What is a diagnostic schema?',style = title_style),
         html.P(["A diagnostic schema is a clinical reasoning tool that links diagnostic thinking to a systematic and logical organizational framework. It can provide a scaffold that allows diagnoses to be more easily remembered to ", html.Span("reduce cognitive load" ,style={"textDecoration": "underline"}),", ", html.Span("minimize anchoring bias" ,style={"textDecoration": "underline"})," towards common or recent diagnoses, " , html.Span("expand the differential" ,style={"textDecoration": "underline"}),", and " , html.Span("facilitate teaching" ,style={"textDecoration": "underline"}),"."], className="lead", style={'font-size':"13px", "margin-top": '10px'}),
-        html.P("Motivation for building this app", className="lead", style={'font-size':"16px", "margin-top": '10px',"margin-bottom": '5px',  "font-weight":'450'}),
-        html.P("I loved the idea of diagnostic schemas, but making them was a hassle. Some online chart makers were too inflexible and others were so overwhelmingly customizable and time consuming. Drawing them by hand was helpful, but I had to redo the whole thing when I wanted to reorganize one piece of the schema. I knew I could have fun making something better. Now, I can draft my thoughts easily in google sheets (and use spell check!). Then, I use this app to easily convert them to high-quality sharable schemas..and now you can too! Please reach out to me for questions, interest, or ideas. ", className="lead", style={'font-size':"13px"}),
+        html.P([html.Span("Motivation behind the app: " ,style={"font-weight": '560'})," I loved the idea of diagnostic schemas, but making them was a hassle. Some online chart makers were too inflexible and others were so overwhelmingly customizable and time consuming. Drawing them by hand was helpful, but I had to redo the whole thing when I wanted to reorganize one piece of the schema. I knew I could have fun making something better. Now, I can draft my thoughts easily in google sheets (and use spell check!). Then, I use this app to easily convert them to high-quality sharable schemas..and now you can too! Please reach out to me for questions, interest, or ideas. "], className="lead", style={'font-size':"13px"}),
     ],open=True)
 
 directions_block = html.Details(
@@ -240,15 +227,22 @@ adjust_block = html.Details(
             ]),
         dbc.Row(
             [
-                html.H5("Stack leaf nodes (narrower & less branching):", style={'font-size':"14px"}),
-                html.Div(dcc.Checklist(id='stack', options=[{'label': '', 'value': 'stack'}], value=['stack']),style={'padding-left':'15px'}),
-            ],style={'padding-left':'15px','padding-right':'15px'}),
+                dbc.Col(html.H5("Stack leaf nodes (narrower & less branching):", style={'font-size':"14px"}),md=10),
+                dbc.Col(html.Div(dcc.Checklist(id='stack', options=[{'label': '', 'value': 'stack'}], value=['stack'])),md=2),
+            ]),
         html.P("When you are happy with your schema graph, download it and share it!", className="lead", style={'font-size':"13px", "margin-top": '15px'}),
         html.Div(
             [
                 dbc.Button("Download PDF schema", id="pdf_download", color="danger", style={'margin':'2px', 'margin-bottom':'10px'}), 
                 dcc.Download(id="download")
             ], style={'text-align':'center','display':'block'}),
+    ])
+
+legend_block = html.Details(
+    [
+        html.Summary('Legend',style = title_style),
+        html.P("Colors correspond to categories of disease pathophysiology:", className="lead", style={'font-size':"13px", "margin-top": '15px'}),
+        html.Div(html.Img(src="./assets/legend.png",alt="Legend",width='75%'), style={'text-align':'center','display':'block','margin-bottom':'10px'}),
     ])
 
 credits_block = html.Details(
@@ -269,18 +263,113 @@ credits_block = html.Details(
             - [Clinical problem solvers](https://clinicalproblemsolving.com/) (diagnostic reasoning podcast, blog, website, app, and more)
             - [HumanDx](https://www.humandx.org/) (medical problem solving app, great practice for clinical thinking)
             - [The Calgary Guide](https://calgaryguide.ucalgary.ca/) (flow-charts for understanding disease pathophysiology)
+            - [Frameworks for Internal Medicine](https://shop.lww.com/Frameworks-for-Internal-Medicine/p/9781496359308) by Andre Mansoor
             - Many medical journals including NEJM, JAMA, and [JGIM](https://www.sgim.org/web-only/clinical-reasoning-exercises/diagnostic-schema)
-            - [Vanderbilt SOM](https://medschool.vanderbilt.edu/) & MSTP mentors & peers
+            
+            Special thanks to: 
+            - [Chase J. Webber, DO](https://medicine.vumc.org/person/chase-j-webber-do)
+            - [Vanderbilt SOM](https://medschool.vanderbilt.edu/), MSTP mentors, & peers
 
             All my code is publically available at [my GitHub](https://github.com/emcarthur). Please email me at my `firstname[dot]lastname[at]gmail[dot]com` with questions or interest!
             ''', className="lead", style={'font-size':"13px", "margin-top": '15px'})
     ])
+
+state_to_abbrev = { "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE", "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA", "Maine": "ME", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN", "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV", "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC", "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA", "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY", "District of Columbia": "DC", "American Samoa": "AS", "Guam": "GU", "Northern Mariana Islands": "MP", "Puerto Rico": "PR", "United States Minor Outlying Islands": "UM", "U.S. Virgin Islands": "VI", "Canada":"Canada", "Mexico":"Mexico", "Outside North America":"ONA" }
+states = [{"label":x, "value":y} for x,y in state_to_abbrev.items()]
+
+survey = html.Div(
+    [
+        html.P("Please help us identify our user base for research and improvement purposes. Thanks!"),
+        dbc.InputGroup(
+            [
+                dbc.Select(
+                    options=[
+                        {"label": "Attending physician", "value": 1},
+                        {"label": "Fellow/Resident", "value": 2},
+                        {"label": "Advanced practice provider (NP/PA)", "value": 3},
+                        {"label": "Other professional provider", "value": 4},
+                        {"label": "Medical student", "value": 5},
+                        {"label": "Other professional student", "value": 6},
+                        {"label": "Undergraduate student", "value": 7},
+                        {"label": "Other - researcher", "value": 8},
+                        {"label": "Other - educator", "value": 9},
+                        {"label": "Other", "value": 10},
+                    ], placeholder="Closest clinical role"
+                ),
+            ],
+            className="mb-3",
+        ),
+        dbc.InputGroup(
+            [
+                dbc.Select(
+                    options=[
+                        {"label": "Internal medicine generalist", "value": 1},
+                        {"label": "Internal medicine subspecialist", "value": 2},
+                        {"label": "Pediatric generalist", "value": 3},
+                        {"label": "Med/Peds", "value": 4},
+                        {"label": "Family medicine", "value": 5},
+                        {"label": "Emergency medicine", "value": 6},
+                        {"label": "Family medicine", "value": 7},
+                        {"label": "Surgical specialty", "value": 8},
+                        {"label": "Other", "value": 9},
+                        {"label": "NA", "value": 10},
+                    ], placeholder="Closest clinical specialty"
+                ),
+            ],
+            className="mb-3",
+        ),
+        dbc.InputGroup(
+            [
+                dbc.Select(
+                    options=states, placeholder="Geographic location"
+                ),
+            ],
+            className="mb-3",
+        ),
+        dbc.InputGroup(
+            [
+                dbc.InputGroupText("Optional feedback or thoughts?"),
+                dbc.Textarea(),
+            ],
+        ),
+
+    ]
+)
+
+modal = html.Div(
+    [
+        dbc.Modal(
+            [
+                dbc.ModalHeader(
+                    dbc.ModalTitle("Welcome user survey"), close_button=False
+                ),
+                dbc.ModalBody(
+                    survey
+                ),
+                dbc.ModalFooter(
+                    [
+                        dbc.Button("I've completed this survey before. Skip to app!", id="completed-dismiss", color='secondary'),
+                        dbc.Button("Submit", id="submit-dismiss")
+                    ]
+                )
+
+            ],
+            id="modal-dismiss",
+            keyboard=False,
+            backdrop="static",
+            is_open=True,
+            centered=True,
+        ),
+    ],
+)
+
 
 app.title = 'Diagnostic Schema Maker'
 app.layout = dbc.Container(
     [
         html.H2("Medical diagnostic schema graph generator"),
         html.P("Evonne McArthur, Vanderbilt MD/PhD Student", className="lead", style={'font-size':"18px"}),
+        modal,
         html.Hr(style= {'color': '#9e9e9e', 'background-color': '#9e9e9e', 'height': '1px',}),
         dbc.Row(
             [
@@ -296,10 +385,11 @@ app.layout = dbc.Container(
                                 html.Hr(style=hr_style),
                                 adjust_block,
                                 html.Hr(style=hr_style),
+                                legend_block,
+                                html.Hr(style=hr_style),                                
                                 credits_block,
                             ],style={"background-color": "#ededed"}
-                        )
-                        
+                        ),
                     ],md=4),
                 dbc.Col(
                     [
@@ -311,10 +401,28 @@ app.layout = dbc.Container(
                             ],style={"position":"relative", "height":"80vh", 'display':'flex','vertical-align':'top'}), #"width":"99%",'min-height':'300px','max-height':'1000px', ,'display':'flex' #'height':'100%','vertical-align': 'top','max-height':'500px', # relative vs absolute
                     ],md=8),
 
-            ])
+            ]),
+        dbc.Row(
+            [
+                html.Div("© 2022 Copyright - Evonne McArthur",style={'text-align':'right', 'font-size':"13px", "margin-top": '10px','color':'#666666'})
+
+            ]
+        )
     ], style = {"margin-top": '15px'}
 )
 
+
+
+@app.callback(
+    Output("modal-dismiss", "is_open"),
+    [Input("submit-dismiss", "n_clicks"),
+     Input("completed-dismiss", "n_clicks"),],
+    [State("modal-dismiss", "is_open")],
+)
+def toggle_modal(n_close, n_complete, is_open):
+    if n_close or n_complete:
+        return not is_open
+    return is_open
 
 @app.callback(
     [Output("df_memory", "data"),
