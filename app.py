@@ -26,8 +26,8 @@ import dash_dangerously_set_inner_html
 import gspread
 from datetime import datetime
 
-#from dotenv import load_dotenv
-#load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
 #os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
@@ -39,7 +39,7 @@ credentials = {
   "type": "service_account",
   "project_id": "diagnostic-schema",
   "private_key_id": os.environ["PRIVATE_KEY_ID"],
-  "private_key": os.environ["PRIVATE_KEY"],
+  "private_key": os.environ["PRIVATE_KEY"].replace('\\n', '\n'),
   "client_email": os.environ["CLIENT_EMAIL"],
   "client_id": os.environ["CLIENT_ID"],
   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
