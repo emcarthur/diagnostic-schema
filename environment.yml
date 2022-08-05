@@ -16,3 +16,5 @@ dependencies:
     - numpy
     - pandas
     - PyPDF2
+    - pip install gspread
+    - python-dotenv

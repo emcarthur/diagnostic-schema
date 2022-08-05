@@ -6,10 +6,7 @@
 #! watermark
 #! legend to pdf
 #! refresh button top right
-#! survey to google sheets
-#! some more examples (fix chest pain and hypoglycemia links)
 #! wont work with node that has a number
-#! center width
 
 ### Input libraries nodes ###
 
@@ -26,10 +23,34 @@ import uuid
 import pandas as pd
 import numpy as np
 import dash_dangerously_set_inner_html
+import gspread
+from datetime import datetime
+
+#from dotenv import load_dotenv
+#load_dotenv()
 
 import os
 #os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
 
+# https://www.youtube.com/watch?v=n2aQ6QOMJKE
+# https://devcenter.heroku.com/articles/config-vars%20
+# https://stackoverflow.com/questions/47446480/how-to-use-google-api-credentials-json-on-heroku
+credentials = {
+  "type": "service_account",
+  "project_id": "diagnostic-schema",
+  "private_key_id": os.environ["PRIVATE_KEY_ID"],
+  "private_key": os.environ["PRIVATE_KEY"],
+  "client_email": os.environ["CLIENT_EMAIL"],
+  "client_id": os.environ["CLIENT_ID"],
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": os.environ["CLIENT_X509_CERT_URL"]
+}
+
+sheets = gspread.service_account_from_dict(credentials).open_by_key("11ZsKtxpXqw5BZdEp05BiFES9l8gqbDNhsOw7lF5cXgw")
+welcomesurvey = sheets.worksheet("welcomesurvey")
+schemanames = sheets.worksheet("schemanames")
 ### Helper functions & dictionaries to format GraphViz HTML nodes ###
 
 html_escape_table = {
@@ -213,8 +234,8 @@ try_block = html.Details(
             ]),
         dbc.DropdownMenu(
             [
-                dbc.DropdownMenuItem("Hypoglycemia", style={'font-size':'12px'}),
-                dbc.DropdownMenuItem("Chest Pain",style={'font-size':'12px'})
+                dbc.DropdownMenuItem("Hypoglycemia", style={'font-size':'12px'}, id='hypoglycemiaExample'),
+                dbc.DropdownMenuItem("Chest Pain",style={'font-size':'12px'}, id='chestpainExample')
             ],size='sm',label="Or check out some examples:",style={ "margin-top": '15px', 'margin-bottom':'10px'},color='secondary'), 
     ])
 
@@ -277,26 +298,15 @@ credits_block = html.Details(
     ])
 
 state_to_abbrev = { "Alabama": "AL", "Alaska": "AK", "Arizona": "AZ", "Arkansas": "AR", "California": "CA", "Colorado": "CO", "Connecticut": "CT", "Delaware": "DE", "Florida": "FL", "Georgia": "GA", "Hawaii": "HI", "Idaho": "ID", "Illinois": "IL", "Indiana": "IN", "Iowa": "IA", "Kansas": "KS", "Kentucky": "KY", "Louisiana": "LA", "Maine": "ME", "Maryland": "MD", "Massachusetts": "MA", "Michigan": "MI", "Minnesota": "MN", "Mississippi": "MS", "Missouri": "MO", "Montana": "MT", "Nebraska": "NE", "Nevada": "NV", "New Hampshire": "NH", "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND", "Ohio": "OH", "Oklahoma": "OK", "Oregon": "OR", "Pennsylvania": "PA", "Rhode Island": "RI", "South Carolina": "SC", "South Dakota": "SD", "Tennessee": "TN", "Texas": "TX", "Utah": "UT", "Vermont": "VT", "Virginia": "VA", "Washington": "WA", "West Virginia": "WV", "Wisconsin": "WI", "Wyoming": "WY", "District of Columbia": "DC", "American Samoa": "AS", "Guam": "GU", "Northern Mariana Islands": "MP", "Puerto Rico": "PR", "United States Minor Outlying Islands": "UM", "U.S. Virgin Islands": "VI", "Canada":"Canada", "Mexico":"Mexico", "Outside North America":"ONA" }
-states = [{"label":x, "value":y} for x,y in state_to_abbrev.items()]
-
+roles = ["Attending physician","Fellow/Resident","Advanced practice provider (NP/PA)","Other professional provider","Medical student","Other professional student","Undergraduate student","Other - researcher","Other - educator", "Other - programmer","Other"]
+specialty = ["Internal medicine generalist", "Internal medicine subspecialist", "Pediatric generalist", "Pediatric specialist", "Med/Peds","Family medicine","Emergency medicine", "Surgical specialty","Other","NA"]
 survey = html.Div(
     [
         html.P("Please help us identify our user base for research and improvement purposes. Thanks!"),
         dbc.InputGroup(
             [
                 dbc.Select(
-                    options=[
-                        {"label": "Attending physician", "value": 1},
-                        {"label": "Fellow/Resident", "value": 2},
-                        {"label": "Advanced practice provider (NP/PA)", "value": 3},
-                        {"label": "Other professional provider", "value": 4},
-                        {"label": "Medical student", "value": 5},
-                        {"label": "Other professional student", "value": 6},
-                        {"label": "Undergraduate student", "value": 7},
-                        {"label": "Other - researcher", "value": 8},
-                        {"label": "Other - educator", "value": 9},
-                        {"label": "Other", "value": 10},
-                    ], placeholder="Closest clinical role"
+                    options=[ {"label": x, "value": x} for x in roles], placeholder="Closest clinical role", id='role'
                 ),
             ],
             className="mb-3",
@@ -304,18 +314,7 @@ survey = html.Div(
         dbc.InputGroup(
             [
                 dbc.Select(
-                    options=[
-                        {"label": "Internal medicine generalist", "value": 1},
-                        {"label": "Internal medicine subspecialist", "value": 2},
-                        {"label": "Pediatric generalist", "value": 3},
-                        {"label": "Med/Peds", "value": 4},
-                        {"label": "Family medicine", "value": 5},
-                        {"label": "Emergency medicine", "value": 6},
-                        {"label": "Family medicine", "value": 7},
-                        {"label": "Surgical specialty", "value": 8},
-                        {"label": "Other", "value": 9},
-                        {"label": "NA", "value": 10},
-                    ], placeholder="Closest clinical specialty"
+                    options=[ {"label": x, "value": x} for x in specialty], placeholder="Closest clinical specialty", id='specialty'
                 ),
             ],
             className="mb-3",
@@ -323,7 +322,7 @@ survey = html.Div(
         dbc.InputGroup(
             [
                 dbc.Select(
-                    options=states, placeholder="Geographic location"
+                    options=[{"label":x, "value":y} for x,y in state_to_abbrev.items()], placeholder="Geographic location", id='location'
                 ),
             ],
             className="mb-3",
@@ -331,7 +330,7 @@ survey = html.Div(
         dbc.InputGroup(
             [
                 dbc.InputGroupText("Optional feedback or thoughts?"),
-                dbc.Textarea(),
+                dbc.Textarea(id='feedback'),
             ],
         ),
 
@@ -453,12 +452,35 @@ def add_footer(schema_pdf):
     Output("modal-dismiss", "is_open"),
     [Input("submit-dismiss", "n_clicks"),
      Input("completed-dismiss", "n_clicks"),],
-    [State("modal-dismiss", "is_open")],
+    [State("modal-dismiss", "is_open"),
+     State("role","value"),
+     State("specialty","value"),
+     State("location","value"),
+     State("feedback","value")],
 )
-def toggle_modal(n_close, n_complete, is_open):
-    if n_close or n_complete:
+def toggle_modal(n_close, n_complete, is_open, role, specialty, location, feedback):
+    if n_close:
+        welcomesurvey.append_row([0,role, specialty, location, feedback, datetime.now().strftime("%Y/%m/%d %H:%M:%S")])
+        return not is_open
+    elif n_complete:
+        welcomesurvey.append_row([1, role, specialty, location, feedback, datetime.now().strftime("%Y/%m/%d %H:%M:%S")])
         return not is_open
     return is_open
+
+@app.callback(
+    [Output("url_in", "value"),
+    Output("sheet_name", "value")],
+    [Input('hypoglycemiaExample', 'n_clicks'),
+    Input('chestpainExample','n_clicks')],
+    prevent_initial_call=True,
+)
+def show_examples(hypoglycemiaExample, chestpainExample):
+    url_in = 'https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit'
+    if callback_context.triggered[0]['prop_id'].split('.')[0] == 'hypoglycemiaExample':
+        sheet_name = "Example-Hypoglycemia"
+    elif callback_context.triggered[0]['prop_id'].split('.')[0] == 'chestpainExample':
+        sheet_name = 'Chest Pain'
+    return url_in, sheet_name
 
 @app.callback(
     [Output("df_memory", "data"),
@@ -478,6 +500,9 @@ def update_df(url_in, sheet_name, refresh, stack, width_scalar):
         else:
             stack = []
         width_scalar = 0
+    else:
+        if "1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc" not in url_in:
+            schemanames.append_row([sheet_name, datetime.now().strftime("%d/%m/%Y %H:%M:%S")])
     return df.to_dict(), stack, width_scalar
 
 @app.callback(
