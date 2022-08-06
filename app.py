@@ -7,6 +7,7 @@
 #! legend to pdf
 #! refresh button top right
 #! wont work with node that has a number
+#! check url, check sheet, check formatting and add alert popups
 
 ### Input libraries nodes ###
 
@@ -26,8 +27,8 @@ import dash_dangerously_set_inner_html
 import gspread
 from datetime import datetime
 
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 import os
 #os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
@@ -96,9 +97,16 @@ def html_escape(text,nodeLevel, scalar = 10, big=False, render=False): # functio
     return "".join(html_escape_table.get(c,c) for c in wraptext)
 
 def findGoogleURL(url_in, sheet_name):
-    id = re.search("\/[d]\/(\w+)\/",url_in).group(1)
+    if re.search("\/[d]\/([\w-]+)\/", url_in) is not None:
+        regex = re.search("\/[d]\/([\w-]+)\/",url_in)
+        id = regex.group(1)
+    else:
+        id = ""
+#        alert_url = True
     sheet_name = sheet_name.replace(" ","%20")
     return f"https://docs.google.com/spreadsheets/d/{id}/gviz/tq?tqx=out:csv&sheet={sheet_name}&range=A4:I200"
+
+# raise HTTPError(req.full_url, code, msg, hdrs, fp) urllib.error.HTTPError: HTTP Error 404: Not Found
 
 def isolateLeafNodes(df):
     leafList = []
@@ -232,6 +240,22 @@ try_block = html.Details(
                 dbc.Col(dbc.Input(id='sheet_name', value='Example-Hypoglycemia', type="text", debounce=False,size='sm'), width=8),
                 dbc.Col(html.Div(dbc.Button("Refresh", id="refresh", color="primary",size='sm'), style={'text-align':'center','display':'block'}),width=4),
             ]),
+        # dbc.Alert(
+        #     "URL not recognized! Make sure it is publicly shared.",
+        #     id="alert-url",
+        #     dismissable=True,
+        #     is_open=False,
+        #     color="danger",
+        #     className="mt-3"
+        # ),
+        # dbc.Alert(
+        #     "Sheet name not recognized! (URL is recognized).",
+        #     id="alert-name",
+        #     dismissable=True,
+        #     is_open=False,
+        #     color="danger",
+        #     className="mt-3"
+        # ),
         dbc.DropdownMenu(
             [
                 dbc.DropdownMenuItem("Hypoglycemia", style={'font-size':'12px'}, id='hypoglycemiaExample'),
@@ -485,15 +509,20 @@ def show_examples(hypoglycemiaExample, chestpainExample):
 @app.callback(
     [Output("df_memory", "data"),
     Output("stack", "value"),
-    Output("slider","value")],
+    Output("slider","value"),],
+    # Output("alert-url",'is_open'),
+    # Output("alert-name",'is_open')],
     [Input('url_in', "value"),
     Input('sheet_name', "value"),
     Input('refresh', 'n_clicks')],
     [State('stack','value'),
-    State('slider','value')]
+    State('slider','value'),]
+    # State("alert-url",'is_open'),
+    # State("alert-name",'is_open')]
 )
-def update_df(url_in, sheet_name, refresh, stack, width_scalar):
-    df = processDF(findGoogleURL(url_in, sheet_name))
+def update_df(url_in, sheet_name, refresh, stack, width_scalar): #, alert_url_open, alert_name_open):
+    url = findGoogleURL(url_in, sheet_name) #, alert_url, alert_name
+    df = processDF(url)
     if not(callback_context.triggered[0]['prop_id'].split('.')[0] == 'refresh'):
         if np.nansum(df['leaf_node']) > 5:
             stack = ['stack']
@@ -503,7 +532,17 @@ def update_df(url_in, sheet_name, refresh, stack, width_scalar):
     else:
         if "1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc" not in url_in:
             schemanames.append_row([sheet_name, datetime.now().strftime("%d/%m/%Y %H:%M:%S")])
-    return df.to_dict(), stack, width_scalar
+    return df.to_dict(), stack, width_scalar#, #, #
+
+# @app.callback(
+#     Output("alert-fade", "is_open"),
+#     [Input("alert-toggle-fade", "n_clicks")],
+#     [State("alert-fade", "is_open")],
+# )
+# def toggle_alert(n, is_open):
+#     if n:
+#         return not is_open
+#     return is_open
 
 @app.callback(
     Output("gv", "dot_source"),
