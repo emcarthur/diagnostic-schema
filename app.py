@@ -3,11 +3,11 @@
 #! To do: ignore nodes without the "Name" category
 #! To do: some kerning issues on pdf export, some indent issues on notes: https://forum.graphviz.org/t/unwanted-space-around-html-font-tags/460/4
 #! Blurry thumbnail of youtube video until resize
-#! watermark
-#! legend to pdf
 #! refresh button top right
-#! wont work with node that has a number
+#! wont work with node that starts with a number (or sheet)
 #! check url, check sheet, check formatting and add alert popups
+#! left-align text if long
+#! split app.py to multiple
 
 ### Input libraries nodes ###
 
@@ -27,11 +27,11 @@ import dash_dangerously_set_inner_html
 import gspread
 from datetime import datetime
 
-# from dotenv import load_dotenv
-# load_dotenv()
+from dotenv import load_dotenv # Only needed to run locally
+load_dotenv() # Only needed to run locally
 
 import os
-#os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin'
+os.environ['PATH'] += os.pathsep + r'C:\Users\Evonne\Downloads\windows_10_msbuild_Release_graphviz-2.50.0-win32\Graphviz\bin' # Only needed to run locally
 
 # https://www.youtube.com/watch?v=n2aQ6QOMJKE
 # https://devcenter.heroku.com/articles/config-vars%20
@@ -217,11 +217,10 @@ directions_block = html.Details(
     [
         html.Summary('Directions',style = title_style),
         html.Div(style={'padding':'5px'}),
-        #html.Img(src = "./assets/tmp.JPG", style={'width':'100%','height':'auto'}), #! remove
         html.Div(
             [
                 dash_dangerously_set_inner_html.DangerouslySetInnerHTML('''
-                <iframe style ="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" src="https://www.youtube.com/embed/4XTd6RnFMR8" allowfullscreen></iframe>
+                <iframe style ="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" src="https://www.youtube.com/embed/u-gjhf2LF4I?start=91" allowfullscreen></iframe>
                 '''),
             ], style={'position':'relative','width':'100%','padding-bottom':'56.25%'}),
         html.P("Make a copy of the google sheets template and set it to public to create your own schema below.", className="lead", style={'font-size':"13px","margin-top": '5px'}),
@@ -259,7 +258,8 @@ try_block = html.Details(
         dbc.DropdownMenu(
             [
                 dbc.DropdownMenuItem("Hypoglycemia", style={'font-size':'12px'}, id='hypoglycemiaExample'),
-                dbc.DropdownMenuItem("Chest Pain",style={'font-size':'12px'}, id='chestpainExample')
+                dbc.DropdownMenuItem("Chest Pain (Toy example)",style={'font-size':'12px'}, id='chestpainExample'),
+                dbc.DropdownMenuItem("Rhabdomyolysis (Genetics)",style={'font-size':'12px'}, id='rhabdoExample')
             ],size='sm',label="Or check out some examples:",style={ "margin-top": '15px', 'margin-bottom':'10px'},color='secondary'), 
     ])
 
@@ -392,7 +392,7 @@ modal = html.Div(
 app.title = 'Diagnostic Schema Maker'
 app.layout = dbc.Container(
     [
-        html.H2("Medical diagnostic schema graph generator"),
+        html.H2("Schematify: Medical diagnostic schema generator"),
         html.P("Evonne McArthur, Vanderbilt MD/PhD Student", className="lead", style={'font-size':"18px"}),
         modal,
         html.Hr(style= {'color': '#9e9e9e', 'background-color': '#9e9e9e', 'height': '1px',}),
@@ -469,7 +469,7 @@ def add_footer(schema_pdf):
     writer = PdfFileWriter()
     writer.addPage(merged_schema)
 
-    with open(schema_pdf + '.footer.pdf', 'wb') as f:
+    with open(schema_pdf + '.schema.pdf', 'wb') as f:
         writer.write(f)
 
 @app.callback(
@@ -495,15 +495,23 @@ def toggle_modal(n_close, n_complete, is_open, role, specialty, location, feedba
     [Output("url_in", "value"),
     Output("sheet_name", "value")],
     [Input('hypoglycemiaExample', 'n_clicks'),
-    Input('chestpainExample','n_clicks')],
+    Input('chestpainExample','n_clicks'),
+    Input('rhabdoExample','n_clicks')],
     prevent_initial_call=True,
 )
-def show_examples(hypoglycemiaExample, chestpainExample):
+def show_examples(hypoglycemiaExample, chestpainExample, rhabdoExample):
     url_in = 'https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit'
     if callback_context.triggered[0]['prop_id'].split('.')[0] == 'hypoglycemiaExample':
         sheet_name = "Example-Hypoglycemia"
+        return url_in, sheet_name
     elif callback_context.triggered[0]['prop_id'].split('.')[0] == 'chestpainExample':
-        sheet_name = 'Chest Pain'
+        sheet_name = 'ToyExample-ChestPain'
+        return url_in, sheet_name
+
+    url_in = 'https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/edit'
+    if callback_context.triggered[0]['prop_id'].split('.')[0] == 'rhabdoExample':
+        sheet_name = 'Rhabdo (Genetics)'
+    
     return url_in, sheet_name
 
 @app.callback(
@@ -530,8 +538,10 @@ def update_df(url_in, sheet_name, refresh, stack, width_scalar): #, alert_url_op
             stack = []
         width_scalar = 0
     else:
-        if "1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc" not in url_in:
+        if ("1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc" not in url_in) and ("1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ" not in url_in):
             schemanames.append_row([sheet_name, datetime.now().strftime("%d/%m/%Y %H:%M:%S")])
+    if ("" in url_in) and sheet_name == ("Rhabdo (Genetics)"):
+        stack = []
     return df.to_dict(), stack, width_scalar#, #, #
 
 # @app.callback(
@@ -573,7 +583,7 @@ def func(n_clicks, df, sheet_name, width_scalar, stack):
     chart = GraphGenerator(df,sheet_name,2**width_scalar,stack, render=True)
     chart.schema.render(f"downloads/{filename}")
     _  = add_footer(f"downloads/{filename}")
-    return dcc.send_file(f"downloads/{filename}.footer.pdf")
+    return dcc.send_file(f"downloads/{filename}.schema.pdf")
 
 
 if __name__ == '__main__':
