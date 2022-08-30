@@ -19,6 +19,7 @@ from dash import Dash, html, dcc, Input, Output, State, callback_context
 from graphviz import Digraph
 import textwrap
 import re
+import requests
 import dash_bootstrap_components as dbc
 import uuid
 import pandas as pd
@@ -26,6 +27,9 @@ import numpy as np
 import dash_dangerously_set_inner_html
 import gspread
 from datetime import datetime
+
+from urllib.error import HTTPError
+
 
 from dotenv import load_dotenv # Only needed to run locally
 load_dotenv() # Only needed to run locally
@@ -96,6 +100,16 @@ def html_escape(text,nodeLevel, scalar = 10, big=False, render=False): # functio
 
     return "".join(html_escape_table.get(c,c) for c in wraptext)
 
+def findSheetTabNames(url_in):
+    if 'http' not in url_in:
+        return None # Just so the app doesn't totally quit if it can't find the sheet
+    html_txt = requests.get(url_in).text
+    pattern = re.compile(r'<div class="goog-inline-block docs-sheet-tab-caption">(.+?)</div>')
+    tab_names = []
+    for match in pattern.finditer(html_txt):
+        tab_names.append(match.group(1))
+    return tab_names
+
 def findGoogleURL(url_in, sheet_name):
     if re.search("\/[d]\/([\w-]+)\/", url_in) is not None:
         regex = re.search("\/[d]\/([\w-]+)\/",url_in)
@@ -131,11 +145,35 @@ def isolateLeafNodes(df):
         leafList.append(False)
     return leafList[:-1]
 
+   
 def processDF(url):
-    df = pd.read_csv(url)
+
+    # This is a mess. To clean up.
+    try:
+        df = pd.read_csv(url)
+    except HTTPError as err:
+         df = pd.read_csv('https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/gviz/tq?tqx=out:csv&sheet=Error&range=A4:I200')
+
     if (len(df) == 0) or (len(df.columns) != 9):
-        df = pd.DataFrame([[0],['Top node'],['ERROR: Could not find your google sheet or it was formatted incorrectly!!'],[np.nan],[np.nan], [np.nan], [np.nan], [0], [np.nan]]).T
+        df = pd.read_csv('https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/gviz/tq?tqx=out:csv&sheet=Error&range=A4:I200')
     df.columns = ['node_num', 'below',  'Name','Description', 'Diagnostics', 'Category', 'Note','node_level','child_num']
+    df = df[df['below'].notnull() & df['Name'].notnull()] # ignore nodes without missing necessary info
+    if (len(df) == 0) or (len(df.columns) != 9):
+        df = pd.read_csv('https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/gviz/tq?tqx=out:csv&sheet=Error&range=A4:I200')
+        df.columns = ['node_num', 'below',  'Name','Description', 'Diagnostics', 'Category', 'Note','node_level','child_num']
+        df = df[df['below'].notnull() & df['Name'].notnull()] # ignore nodes without missing necessary info
+
+    df['node_level'] = 0
+    df['child_num'] = 1
+    for i,r in df.iloc[1:,:].iterrows():
+        df.loc[i,"node_level"] = df.loc[df['Name'] == r['below'],"node_level"].values[0]+1
+        df.loc[i,"child_num"] = sum(df.iloc[:i+1,:]['below'] == r['below'])
+    
+    max_base = max(df['node_level'])
+    df['node_num'] = 10**max_base
+    for i,r in df.iloc[1:,:].iterrows():
+        df.loc[i,'node_num'] = r["child_num"]*10**(max_base - r['node_level']) + df.loc[df['Name'] == r['below'],"node_num"].values[0]
+
     df = df.sort_values(by='node_num').reset_index(drop=True)
     df['node_num'] = df['node_num'].astype(str)
     df = df[df['Name'].notnull()]
@@ -206,39 +244,47 @@ server = app.server
 title_style = {"margin-top": '10px', 'margin-bottom':'8px', 'font-size':"18px", 'font-weight':'600'}
 hr_style = {'width': '90%', 'margin':'auto', 'color': '#9e9e9e', 'background-color': '#9e9e9e', 'height': '1px', 'border': 'none'}
 
-definition_block = html.Details(
-    [
-        html.Summary('What is a diagnostic schema?',style = title_style),
-        html.P(["A diagnostic schema is a clinical reasoning tool that links diagnostic thinking to a systematic and logical organizational framework. It can provide a scaffold that allows diagnoses to be more easily remembered to ", html.Span("reduce cognitive load" ,style={"textDecoration": "underline"}),", ", html.Span("minimize anchoring bias" ,style={"textDecoration": "underline"})," towards common or recent diagnoses, " , html.Span("expand the differential" ,style={"textDecoration": "underline"}),", and " , html.Span("facilitate teaching" ,style={"textDecoration": "underline"}),"."], className="lead", style={'font-size':"13px", "margin-top": '10px'}),
-        html.P([html.Span("Motivation behind the app: " ,style={"font-weight": '560'})," I loved the idea of diagnostic schemas, but making them was a hassle. Some online chart makers were too inflexible and others were so overwhelmingly customizable and time consuming. Drawing them by hand was helpful, but I had to redo the whole thing when I wanted to reorganize one piece of the schema. I knew I could have fun making something better. Now, I can draft my thoughts easily in google sheets (and use spell check!). Then, I use this app to easily convert them to high-quality sharable schemas..and now you can too! Please reach out to me for questions, interest, or ideas. "], className="lead", style={'font-size':"13px"}),
-    ],open=True)
+# definition_block = html.Details(
+#     [
+#         html.Summary('What is a diagnostic schema?',style = title_style),
+#         html.P(["A diagnostic schema is a clinical reasoning tool that links diagnostic thinking to a systematic and logical organizational framework. It can provide a scaffold that allows diagnoses to be more easily remembered to ", html.Span("reduce cognitive load" ,style={"textDecoration": "underline"}),", ", html.Span("minimize anchoring bias" ,style={"textDecoration": "underline"})," towards common or recent diagnoses, " , html.Span("expand the differential" ,style={"textDecoration": "underline"}),", and " , html.Span("facilitate teaching" ,style={"textDecoration": "underline"}),"."], className="lead", style={'font-size':"13px", "margin-top": '10px'}),
+#         html.P([html.Span("Motivation behind the app: " ,style={"font-weight": '560'})," I loved the idea of diagnostic schemas, but making them was a hassle. Some online chart makers were too inflexible and others were so overwhelmingly customizable and time consuming. Drawing them by hand was helpful, but I had to redo the whole thing when I wanted to reorganize one piece of the schema. I knew I could have fun making something better. Now, I can draft my thoughts easily in google sheets (and use spell check!). Then, I use this app to easily convert them to high-quality sharable schemas..and now you can too! Please reach out to me for questions, interest, or ideas. "], className="lead", style={'font-size':"13px"}),
+#     ],open=True)
 
 directions_block = html.Details(
     [
         html.Summary('Directions',style = title_style),
-        html.Div(style={'padding':'5px'}),
+        html.P(["A diagnostic schema is a clinical reasoning tool that links diagnostic thinking to a systematic and logical organizational framework to ", html.Span("reduce cognitive load" ,style={"font-style": "italic"}),", ", html.Span("minimize anchoring bias" ,style={"font-style": "italic"})," towards common or recent diagnoses, " , html.Span("expand the differential" ,style={"font-style": "italic"}),", and " , html.Span("facilitate teaching" ,style={"font-style": "italic"}),"."], className="lead", style={'font-size':"13px", "margin-top": '10px'}),
+        html.P(["The best way to learn why and how to use Schematify is to watch it in action:"], className="lead", style={'font-size':"13px", "margin-top": '10px'}),
         html.Div(
             [
                 dash_dangerously_set_inner_html.DangerouslySetInnerHTML('''
-                <iframe style ="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" src="https://www.youtube.com/embed/u-gjhf2LF4I?start=91" allowfullscreen></iframe>
+                <iframe style ="position:absolute;top:0;left:0;width:100%;height:100%;border:0;" src="https://www.youtube.com/embed/u-gjhf2LF4I" allowfullscreen></iframe>
                 '''),
             ], style={'position':'relative','width':'100%','padding-bottom':'56.25%'}),
-        html.P("Make a copy of the google sheets template and set it to public to create your own schema below.", className="lead", style={'font-size':"13px","margin-top": '5px'}),
-        html.Div([dbc.Button("Template & Example Google Sheet", target='_blank', href='https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/', color="secondary")], style={'text-align':'center','display':'block'}),
-        html.P("Further instructions are in the document & video. Edit the nodes, specify their connections, and then copy the URL and sheet name to the boxes below.", className="lead", style={'font-size':"13px", "margin-top": '15px'}),
+        html.P("Make a copy of the google sheets template, set it to public, and follow the directions to create your own schema below.", className="lead", style={'font-size':"13px","margin-top": '5px'}),
+        html.Div([dbc.Button("Template & Example Google Sheet", target='_blank', href='https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/', color="secondary")], style={'text-align':'center','display':'block'}, className='mb-3'),
+        # html.P("Further instructions are in the document & video. Edit the nodes, specify their connections, and then copy the URL and sheet name to the boxes below.", className="lead", style={'font-size':"13px", "margin-top": '15px'}),
     ])
 
 try_block = html.Details(
     [
-        html.Summary('Try it out',style = title_style),
+        html.Summary('Create your schema',style = title_style),
         html.P("Google Sheets Link (make sure it is public):", className="lead", style={ "margin-top": '10px', 'margin-bottom':'2px','font-size':"14px", 'font-weight':'600'}),
-        dbc.Input(id='url_in', value='https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit', type="text", debounce=False,size='sm'), 
+        dbc.Input(id='url_in', value='https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit', type="text", debounce=False), 
         html.P("Google sheet tab name:", className="lead", style={'font-size':"14px", "margin-top": '10px', 'margin-bottom':'2px','font-weight':'600'}),
         dbc.Row(
             [
-                dbc.Col(dbc.Input(id='sheet_name', value='Example-Hypoglycemia', type="text", debounce=False,size='sm'), width=8),
-                dbc.Col(html.Div(dbc.Button("Refresh", id="refresh", color="primary",size='sm'), style={'text-align':'center','display':'block'}),width=4),
+                dbc.Col(dcc.Dropdown(id="sheet_name", clearable=False), width=8),
+                dbc.Col(html.Div(dbc.Button("Refresh", id="refresh", color="primary",), style={'text-align':'center','display':'block'}),width=4),
             ]),
+        dbc.DropdownMenu(
+            [
+                dbc.DropdownMenuItem("Hypoglycemia", style={'font-size':'12px'}, id='hypoglycemiaExample'),
+                dbc.DropdownMenuItem("Chest Pain (Toy example)",style={'font-size':'12px'}, id='chestpainExample'),
+                dbc.DropdownMenuItem("Rhabdomyolysis (Genetics)",style={'font-size':'12px'}, id='rhabdoExample')
+            ],size='sm',label="Or check out some examples:",style={ "margin-top": '15px', 'margin-bottom':'10px'},color='secondary'), 
+
         # dbc.Alert(
         #     "URL not recognized! Make sure it is publicly shared.",
         #     id="alert-url",
@@ -255,12 +301,6 @@ try_block = html.Details(
         #     color="danger",
         #     className="mt-3"
         # ),
-        dbc.DropdownMenu(
-            [
-                dbc.DropdownMenuItem("Hypoglycemia", style={'font-size':'12px'}, id='hypoglycemiaExample'),
-                dbc.DropdownMenuItem("Chest Pain (Toy example)",style={'font-size':'12px'}, id='chestpainExample'),
-                dbc.DropdownMenuItem("Rhabdomyolysis (Genetics)",style={'font-size':'12px'}, id='rhabdoExample')
-            ],size='sm',label="Or check out some examples:",style={ "margin-top": '15px', 'margin-bottom':'10px'},color='secondary'), 
     ])
 
 adjust_block = html.Details(
@@ -307,8 +347,8 @@ credits_block = html.Details(
 
             I was inspired by many thoughtful diagnosticians, discussions, and texts:
 
-            - [Clinical problem solvers](https://clinicalproblemsolving.com/) (diagnostic reasoning podcast, blog, website, app, and more)
-            - [HumanDx](https://www.humandx.org/) (medical problem solving app, great practice for clinical thinking)
+            - [Clinical problem solvers](https://clinicalproblemsolving.com/) (diagnostic reasoning podcast, website, and more)
+            - [HumanDx](https://www.humandx.org/) (medical problem solving app)
             - [The Calgary Guide](https://calgaryguide.ucalgary.ca/) (flow-charts for understanding disease pathophysiology)
             - [Frameworks for Internal Medicine](https://shop.lww.com/Frameworks-for-Internal-Medicine/p/9781496359308) by Andre Mansoor
             - Many medical journals including NEJM, JAMA, and [JGIM](https://www.sgim.org/web-only/clinical-reasoning-exercises/diagnostic-schema)
@@ -317,7 +357,7 @@ credits_block = html.Details(
             - [Chase J. Webber, DO](https://medicine.vumc.org/person/chase-j-webber-do)
             - [Vanderbilt SOM](https://medschool.vanderbilt.edu/), MSTP mentors, & peers
 
-            All my code is publically available at [my GitHub](https://github.com/emcarthur). Please email me at my `firstname[dot]lastname[at]gmail[dot]com` with questions or interest!
+            All my code is publically available at [my GitHub](https://github.com/emcarthur/diagnostic-schema). Please email me at my `firstname[dot]lastname[at]gmail[dot]com` with questions or interest!
             ''', className="lead", style={'font-size':"13px", "margin-top": '15px'})
     ])
 
@@ -402,8 +442,8 @@ app.layout = dbc.Container(
                     [
                         dbc.Row(
                             [
-                                definition_block,
-                                html.Hr(style=hr_style),
+                                # definition_block,
+                                # html.Hr(style=hr_style),
                                 directions_block, 
                                 html.Hr(style=hr_style),
                                 try_block,
@@ -419,11 +459,14 @@ app.layout = dbc.Container(
                 dbc.Col(
                     [
                      #   html.Div(html.Img(src="./assets/legend2.png",alt="Legend", width="65%",), style={'text-align':'center','display':'block','margin-bottom':'10px'}),
+                        html.Div("Reset zoom:",style={'text-align':'right', 'font-size':"13px", 'margin-bottom':'-6px','color':'#000000'}),
                         html.Div(
                             [
                                 dcc.Store(id='df_memory', storage_type='local'),
                                 dash_interactive_graphviz.DashInteractiveGraphviz(id="gv")
                             ],style={"position":"relative", "height":"80vh", 'display':'flex','vertical-align':'top'}), #"width":"99%",'min-height':'300px','max-height':'1000px', ,'display':'flex' #'height':'100%','vertical-align': 'top','max-height':'500px', # relative vs absolute
+                            html.Hr(style= {'color': '#9e9e9e', 'background-color': '#9e9e9e', 'height': '1px','margin':'0px'}),
+
                     ],md=8),
 
             ]),
@@ -491,28 +534,43 @@ def toggle_modal(n_close, n_complete, is_open, role, specialty, location, feedba
         return not is_open
     return is_open
 
-@app.callback(
-    [Output("url_in", "value"),
-    Output("sheet_name", "value")],
-    [Input('hypoglycemiaExample', 'n_clicks'),
-    Input('chestpainExample','n_clicks'),
-    Input('rhabdoExample','n_clicks')],
-    prevent_initial_call=True,
-)
-def show_examples(hypoglycemiaExample, chestpainExample, rhabdoExample):
-    url_in = 'https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit'
-    if callback_context.triggered[0]['prop_id'].split('.')[0] == 'hypoglycemiaExample':
-        sheet_name = "Example-Hypoglycemia"
-        return url_in, sheet_name
-    elif callback_context.triggered[0]['prop_id'].split('.')[0] == 'chestpainExample':
-        sheet_name = 'ToyExample-ChestPain'
-        return url_in, sheet_name
+# @app.callback(
+#     [Output("url_in", "value"),
+#     Output("sheet_name", "value")],
+#     [Input('hypoglycemiaExample', 'n_clicks'),
+#     Input('chestpainExample','n_clicks'),
+#     Input('rhabdoExample','n_clicks')],
+#     prevent_initial_call=True,
+# )
+# def show_examples(hypoglycemiaExample, chestpainExample, rhabdoExample):
+#     url_in = 'https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit'
+#     if callback_context.triggered[0]['prop_id'].split('.')[0] == 'hypoglycemiaExample':
+#         sheet_name = "Example-Hypoglycemia"
+#         return url_in, sheet_name
+#     elif callback_context.triggered[0]['prop_id'].split('.')[0] == 'chestpainExample':
+#         sheet_name = 'ToyExample-ChestPain'
+#         return url_in, sheet_name
 
-    url_in = 'https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/edit'
-    if callback_context.triggered[0]['prop_id'].split('.')[0] == 'rhabdoExample':
-        sheet_name = 'Rhabdo (Genetics)'
+#     url_in = 'https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/edit'
+#     if callback_context.triggered[0]['prop_id'].split('.')[0] == 'rhabdoExample':
+#         sheet_name = 'Rhabdo (Genetics)'
     
-    return url_in, sheet_name
+#     return url_in, sheet_name
+
+@app.callback(
+    [Output("sheet_name","options"),
+    Output("sheet_name","value"),],
+    [Input('url_in','value'),],
+    [State('sheet_name','value'),],
+)
+def updateSheetTabOptions(url_in, sheet_name):
+    tab_names = findSheetTabNames(url_in)
+    if sheet_name in tab_names:
+        default_tab = sheet_name
+    else:
+        default_tab = tab_names[0] # will default to first tab
+    options = [{"label": x, "value": x} for x in tab_names]
+    return options, default_tab
 
 @app.callback(
     [Output("df_memory", "data"),
@@ -520,16 +578,30 @@ def show_examples(hypoglycemiaExample, chestpainExample, rhabdoExample):
     Output("slider","value"),],
     # Output("alert-url",'is_open'),
     # Output("alert-name",'is_open')],
-    [Input('url_in', "value"),
-    Input('sheet_name', "value"),
-    Input('refresh', 'n_clicks')],
-    [State('stack','value'),
+    [Input('sheet_name', "value"),
+    Input('refresh', 'n_clicks'),
+    Input('hypoglycemiaExample', 'n_clicks'),
+    Input('chestpainExample','n_clicks'),
+    Input('rhabdoExample','n_clicks')],
+    [State('url_in', "value"),
+    State('stack','value'),
     State('slider','value'),]
     # State("alert-url",'is_open'),
     # State("alert-name",'is_open')]
 )
-def update_df(url_in, sheet_name, refresh, stack, width_scalar): #, alert_url_open, alert_name_open):
+def update_df(sheet_name, refresh, hypoglycemiaExample, chestpainExample, rhabdoExample, url_in, stack, width_scalar): #, alert_url_open, alert_name_open):
+    if callback_context.triggered[0]['prop_id'].split('.')[0] == 'hypoglycemiaExample':
+        sheet_name = "Example-Hypoglycemia"
+        url_in = 'https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit'
+    elif callback_context.triggered[0]['prop_id'].split('.')[0] == 'chestpainExample':
+        sheet_name = 'ToyExample-ChestPain'
+        url_in = 'https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit'
+    elif callback_context.triggered[0]['prop_id'].split('.')[0] == 'rhabdoExample':
+        sheet_name = 'Rhabdo (Genetics)'
+        url_in = 'https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/edit'
+    
     url = findGoogleURL(url_in, sheet_name) #, alert_url, alert_name
+
     df = processDF(url)
     if not(callback_context.triggered[0]['prop_id'].split('.')[0] == 'refresh'):
         if np.nansum(df['leaf_node']) > 5:
@@ -577,9 +649,7 @@ def display_output(df, width_scalar,stack, sheet_name):
 )
 def func(n_clicks, df, sheet_name, width_scalar, stack):
     df = pd.DataFrame.from_dict(df)
-    filename = f"{sheet_name}_{uuid.uuid1()}"
-    #url_in = "https://docs.google.com/spreadsheets/d/1yZAG8AUSNQ7pYZ0hjcZaO87pbCgF7YQkwTbGc3ct9Bc/edit#gid=0"
-    #sheet_name = "Hypoglycemia"
+    filename = f"Schematify_{uuid.uuid1()}"
     chart = GraphGenerator(df,sheet_name,2**width_scalar,stack, render=True)
     chart.schema.render(f"downloads/{filename}")
     _  = add_footer(f"downloads/{filename}")
