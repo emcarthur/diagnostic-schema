@@ -122,6 +122,28 @@ def findGoogleURL(url_in, sheet_name):
 
 # raise HTTPError(req.full_url, code, msg, hdrs, fp) urllib.error.HTTPError: HTTP Error 404: Not Found
 
+def identifyNodeLevels(df):
+    df['node_level'] = 0
+    df['child_num'] = 1
+
+    for i,r in df.iloc[1:,:].iterrows():
+        currentChild = r['below']
+        counter = 0
+        while currentChild != "Top node":
+            if currentChild not in df['Name'].values:
+                df.drop(i, inplace=True,axis=0)
+                break
+            counter+=1
+            currentChild = df.loc[df['Name'] == currentChild, "below"].values[0]
+        df.loc[i,"node_level"] = counter
+    
+    df = df[df['below'].notnull() & df['Name'].notnull()].reset_index().drop('index',axis=1) # ignore nodes without missing necessary info
+
+    for i,r in df.iloc[1:,:].iterrows():
+        df.loc[i,"child_num"] = sum(df.iloc[:i+1,:]['below'] == r['below'])
+    
+    return df
+        
 def isolateLeafNodes(df):
     leafList = []
     i = 0
@@ -147,36 +169,27 @@ def isolateLeafNodes(df):
 
    
 def processDF(url):
-
     # This is a mess. To clean up.
     try:
         df = pd.read_csv(url)
     except HTTPError as err:
          df = pd.read_csv('https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/gviz/tq?tqx=out:csv&sheet=Error&range=A4:I200')
-
-    if (len(df) == 0) or (len(df.columns) != 9):
+    if (len(df) == 0) or (len(df.columns) != 9): # if missing data
         df = pd.read_csv('https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/gviz/tq?tqx=out:csv&sheet=Error&range=A4:I200')
     df.columns = ['node_num', 'below',  'Name','Description', 'Diagnostics', 'Category', 'Note','node_level','child_num']
     df = df[df['below'].notnull() & df['Name'].notnull()] # ignore nodes without missing necessary info
-    if (len(df) == 0) or (len(df.columns) != 9):
+    if (len(df) == 0) or (len(df.columns) != 9): # if missing data 
         df = pd.read_csv('https://docs.google.com/spreadsheets/d/1i-tuYPWaG5TTAxjksTlV7aE5S1jOR69Ers6WH1_M8SQ/gviz/tq?tqx=out:csv&sheet=Error&range=A4:I200')
         df.columns = ['node_num', 'below',  'Name','Description', 'Diagnostics', 'Category', 'Note','node_level','child_num']
-        df = df[df['below'].notnull() & df['Name'].notnull()] # ignore nodes without missing necessary info
-
-    df['node_level'] = 0
-    df['child_num'] = 1
-    for i,r in df.iloc[1:,:].iterrows():
-        df.loc[i,"node_level"] = df.loc[df['Name'] == r['below'],"node_level"].values[0]+1
-        df.loc[i,"child_num"] = sum(df.iloc[:i+1,:]['below'] == r['below'])
+    df.iloc[0,1] = 'Top node' #in case this was accidentally edited
+    df = identifyNodeLevels(df)
     
     max_base = max(df['node_level'])
     df['node_num'] = 10**max_base
     for i,r in df.iloc[1:,:].iterrows():
         df.loc[i,'node_num'] = r["child_num"]*10**(max_base - r['node_level']) + df.loc[df['Name'] == r['below'],"node_num"].values[0]
-
     df = df.sort_values(by='node_num').reset_index(drop=True)
     df['node_num'] = df['node_num'].astype(str)
-    df = df[df['Name'].notnull()]
     df.loc[1:,'child_node_num'] = [df.loc[df['Name'] == x,'node_num'].values[0] for x in df['below'].values[1:]]
     df.loc[1:,'leaf_node'] = isolateLeafNodes(df)
     return df
